@@ -1,0 +1,150 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Audio Visualizer Point Cloud Circle</title>
+<style>
+  body {
+    margin: 0;
+    overflow: hidden;
+    background: black;
+  }
+  audio {
+    position: absolute;
+    bottom: 10px;
+    left: 10px;
+  }
+  input[type="file"] {
+    position: absolute;
+    right: 10px;
+    bottom: 10px;
+  }
+  input[type="range"] {
+    position: absolute;
+    right: 10px;
+    bottom: 50px;
+  }
+</style>
+</head>
+<body>
+<script>
+
+const canvas = document.createElement('canvas');
+const context = canvas.getContext('2d');
+document.body.appendChild(canvas);
+
+canvas.width = window.innerWidth;
+canvas.height = window.innerHeight;
+
+const centerX = canvas.width / 2;
+const centerY = canvas.height / 2;
+const numRings = 20;
+const numPointsPerRing = 200;
+const maxRadius = 300;
+
+// Creating an audio context
+const AudioContext = window.AudioContext || window.webkitAudioContext;
+const audioContext = new AudioContext();
+const analyser = audioContext.createAnalyser();
+analyser.fftSize = 256;
+const bufferLength = analyser.frequencyBinCount;
+const dataArray = new Uint8Array(bufferLength);
+
+// Create an audio element
+const audio = document.createElement('audio');
+audio.controls = true;
+audio.style.position = 'absolute';
+audio.style.left = '50%';
+audio.style.transform = 'translateX(-50%)';
+audio.style.bottom = '10px';
+document.body.appendChild(audio);
+
+// Add an input element to accept all audio file types
+const input = document.createElement('input');
+input.type = 'file';
+input.accept = 'audio/*';
+input.style.position = 'absolute';
+input.style.left = '48%';
+input.style.bottom = '70px';
+document.body.appendChild(input);
+
+// Add a slider to control the visualizer's scale/amplification
+const slider = document.createElement('input');
+slider.type = 'range';
+slider.min = '0.1';
+slider.max = '9';
+slider.step = '0.1';
+slider.value = '3';
+slider.style.position = 'absolute';
+slider.style.left = '50%';
+slider.style.transform = 'translateX(-50%)';
+slider.style.bottom = '100px';
+document.body.appendChild(slider);
+render();
+
+input.onchange = function(event) {
+  const file = event.target.files[0];
+  const reader = new FileReader();
+  
+  reader.onload = function(e) {
+    audio.src = e.target.result;
+    audioContext.resume().then(() => {
+      audio.load();
+      audio.play();
+    });
+    
+    const source = audioContext.createMediaElementSource(audio);
+    source.connect(analyser);
+    analyser.connect(audioContext.destination);
+    
+    render();
+  };
+  
+  reader.readAsDataURL(file);
+};
+
+function render() {
+  requestAnimationFrame(render);
+  // Get the frequency data from the audio
+  analyser.getByteFrequencyData(dataArray);
+  context.clearRect(0, 0, canvas.width, canvas.height);
+  context.fillStyle = 'white';
+  
+  // For each ring
+  for (let ring = 0; ring < numRings; ring++) {
+    // For each point in the ring
+    for (let i = 0; i < numPointsPerRing; i++) {
+      // Position of each point relative to the center
+      const angle = Math.PI * 2 / numPointsPerRing * i;
+      let radius = maxRadius * (ring + 1) / numRings;
+      // add sinusoidal variance to the radius per ring
+      radius += Math.sin(ring * 0.2) * 10;
+      let newRadius = radius;
+
+      // Make the last ring react to the music with scale from slider
+      if (ring === numRings - 1) {
+        let modifier;
+        if (i <= numPointsPerRing/2) {
+          modifier = dataArray[numPointsPerRing/2 - i] / 128.0;
+        } else {
+          modifier = dataArray[i % (numPointsPerRing/2)] / 128.0;
+        }
+        newRadius += modifier * slider.value * 5;
+      }
+
+      // Populate points between radius and newRadius
+      for (let r = radius-slider.value*(newRadius-radius); r <= newRadius; r+=7) {
+        const x = centerX + Math.cos(angle) * r;
+        const y = centerY + Math.sin(angle) * r;
+        context.beginPath();
+        context.arc(x, y, 1, 0, Math.PI * 2);
+        context.fill();
+      }
+    }
+  }
+}
+
+</script>
+</body>
+</html>
